@@ -115,23 +115,6 @@ echo "http://$ALB" && curl -sS "http://$ALB"
 MSYS_NO_PATHCONV=1 aws logs tail /ecs/hello-world --follow \
   --region us-east-1 --profile arvo
 ```
-
-### Check final rapide (tout-en-un)
-
-```bash
-# 1) URL répond
-ALB=$(terraform -chdir=infra output -raw alb_dns_name); curl -sS "http://$ALB" | head -n1
-# 2) Service stable
-aws ecs describe-services --cluster hello-world-cluster --services hello-world \
-  --region us-east-1 --profile arvo \
-  --query 'services[0].{desired:desiredCount,running:runningCount,status:status}'
-# 3) Cibles healthy
-TG=$(aws elbv2 describe-target-groups --names hello-world-tg \
-  --region us-east-1 --profile arvo --query 'TargetGroups[0].TargetGroupArn' --output text)
-aws elbv2 describe-target-health --target-group-arn "$TG" \
-  --region us-east-1 --profile arvo --query 'TargetHealthDescriptions[].TargetHealth.State'
-```
-
 ---
 
 ## 📝 Access logs (optionnel)
@@ -164,25 +147,6 @@ terraform -chdir=infra apply -auto-approve
 * `container_port` (number, défaut `8080` → pour hello world = `5000`)
 * `desired_count` (number, défaut `1`)
 * `extra_env` (map(string), variables d’env optionnelles)
-
-> Les valeurs effectives sont alimentées par `terraform.tfvars` généré par l’orchestrateur.
-
----
-
-## ↕️ Mise à l’échelle (exemple)
-
-```bash
-terraform -chdir=infra apply -auto-approve -var="desired_count=2"
-```
-
----
-
-## 🧹 Nettoyage (éviter les coûts)
-
-```bash
-terraform -chdir=infra destroy -auto-approve
-aws ecr delete-repository --repository-name hello-world --force --region us-east-1 --profile arvo
-```
 
 ---
 ## Architecture

@@ -1,0 +1,14 @@
+- name: Set up Python
+  uses: actions/setup-python@v5
+  with:
+    python-version: '3.11'   # OK de garder 3.11 en CI
+
+- name: Install dev tools (pinned)
+  run: |
+    python -m pip install --upgrade pip
+    pip install -r requirements-dev.txt
+
+- name: Lint (Black & flake8)
+  run: |
+    black --check .
+    flake8 orchestrator

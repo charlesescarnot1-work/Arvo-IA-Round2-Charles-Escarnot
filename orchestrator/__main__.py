@@ -1,8 +1,20 @@
 import typer, os, pathlib, shutil, time, json
 from git import Repo
-from orchestrator.utils import ROOT, WORK, SRC, detect_language, detect_port, ensure_dockerfile, ensure_requirements, docker_build_tag_push, write_tfvars, run
+from orchestrator.utils import (
+    ROOT,
+    WORK,
+    SRC,
+    detect_language,
+    detect_port,
+    ensure_dockerfile,
+    ensure_requirements,
+    docker_build_tag_push,
+    write_tfvars,
+    run,
+)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+
 
 @app.command()
 def deploy(
@@ -10,10 +22,13 @@ def deploy(
     app_name: str = typer.Option("autodeploy-app", help="ECR repo & ECS service name"),
     aws_region: str = typer.Option("us-east-1"),
     aws_profile: str = typer.Option("default"),
-    env: list[str] = typer.Option(None, "--env", help="Extra env as KEY=VALUE (repeatable)")
+    env: list[str] = typer.Option(
+        None, "--env", help="Extra env as KEY=VALUE (repeatable)"
+    ),
 ):
     # prep workdir
-    if WORK.exists(): shutil.rmtree(WORK)
+    if WORK.exists():
+        shutil.rmtree(WORK)
     SRC.parent.mkdir(parents=True, exist_ok=True)
 
     print("==> Cloning repo...")
@@ -29,7 +44,9 @@ def deploy(
     ensure_dockerfile(lang, port)
 
     print("==> Building & pushing image...")
-    image, registry = docker_build_tag_push(aws_region, aws_profile, app_name, image_tag=str(int(time.time())))
+    image, registry = docker_build_tag_push(
+        aws_region, aws_profile, app_name, image_tag=str(int(time.time()))
+    )
     print("Pushed:", image)
 
     print("==> Writing terraform.tfvars...")
@@ -43,14 +60,14 @@ def deploy(
     print("tfvars at", tfvars)
 
     print("==> Terraform apply...")
-    run(["terraform","init"], cwd=ROOT/"infra")
-    run(["terraform","apply","-auto-approve"], cwd=ROOT/"infra")
+    run(["terraform", "init"], cwd=ROOT / "infra")
+    run(["terraform", "apply", "-auto-approve"], cwd=ROOT / "infra")
 
     print("==> Fetching outputs...")
-    out = run(["terraform","output","-json"], cwd=ROOT/"infra")
+    out = run(["terraform", "output", "-json"], cwd=ROOT / "infra")
     try:
         data = json.loads(out.stdout)
-        alb = data.get("alb_dns_name",{}).get("value")
+        alb = data.get("alb_dns_name", {}).get("value")
         if alb:
             print(f"PUBLIC_URL: http://{alb}")
         else:
@@ -59,14 +76,16 @@ def deploy(
         print("Could not parse terraform outputs:", e)
     print("==> Done.")
 
+
 @app.command()
 def destroy(
     aws_region: str = typer.Option("us-east-1"),
-    aws_profile: str = typer.Option("default")
+    aws_profile: str = typer.Option("default"),
 ):
     print("==> Terraform destroy...")
-    run(["terraform","destroy","-auto-approve"], cwd=ROOT/"infra")
+    run(["terraform", "destroy", "-auto-approve"], cwd=ROOT / "infra")
     print("==> (Optional) Delete ECR repo manually if desired.")
+
 
 if __name__ == "__main__":
     app()

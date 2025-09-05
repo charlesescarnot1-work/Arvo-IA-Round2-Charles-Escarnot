@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
-from typing import Optional
 
 from .utils import (
     BUILD,
@@ -20,9 +19,7 @@ from .utils import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Build & deploy to ECS Fargate"
-    )
+    parser = argparse.ArgumentParser(description="Build & deploy to ECS Fargate")
     parser.add_argument("--aws-region", default="us-east-1")
     parser.add_argument("--aws-profile", default="arvo")
     parser.add_argument("--app-name", default="hello-world")
@@ -32,9 +29,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    image_tag: str = args.image_tag or datetime.utcnow().strftime(
-        "%Y%m%d%H%M%S"
-    )
+    image_tag: str = args.image_tag or datetime.utcnow().strftime("%Y%m%d%H%M%S")
 
     WORK.mkdir(parents=True, exist_ok=True)
     SRC.mkdir(parents=True, exist_ok=True)
@@ -57,9 +52,7 @@ def main() -> int:
         image=image_uri,
         aws_region=args.aws_region,
         container_port=port,
-        extra_env={
-            "GUNICORN_CMD_ARGS": "--access-logfile - --log-level info"
-        },
+        extra_env={"GUNICORN_CMD_ARGS": "--access-logfile - --log-level info"},
     )
     print(f"wrote {tfvars_path}")
 
@@ -76,12 +69,8 @@ def main() -> int:
     )
 
     # show outputs
-    alb = run(
-        ["terraform", "-chdir=infra", "output", "-raw", "alb_dns_name"]
-    ).stdout.strip()
-    svc = run(
-        ["terraform", "-chdir=infra", "output", "-raw", "service_name"]
-    ).stdout.strip()
+    alb = run(["terraform", "-chdir=infra", "output", "-raw", "alb_dns_name"]).stdout.strip()
+    svc = run(["terraform", "-chdir=infra", "output", "-raw", "service_name"]).stdout.strip()
 
     print("\n=== Deployment complete ===")
     print(f"Service  : {svc}")

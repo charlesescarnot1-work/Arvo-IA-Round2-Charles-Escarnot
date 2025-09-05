@@ -1,91 +1,93 @@
-import typer, os, pathlib, shutil, time, json
-from git import Repo
-from orchestrator.utils import (
-    ROOT,
-    WORK,
+# orchestrator/__main__.py
+from __future__ import annotations
+
+import argparse
+from datetime import datetime
+from typing import Optional
+
+from .utils import (
+    BUILD,
     SRC,
+    WORK,
     detect_language,
     detect_port,
+    docker_build_tag_push,
     ensure_dockerfile,
     ensure_requirements,
-    docker_build_tag_push,
-    write_tfvars,
     run,
+    write_tfvars,
 )
 
-app = typer.Typer(no_args_is_help=True, add_completion=False)
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Build & deploy to ECS Fargate"
+    )
+    parser.add_argument("--aws-region", default="us-east-1")
+    parser.add_argument("--aws-profile", default="arvo")
+    parser.add_argument("--app-name", default="hello-world")
+    parser.add_argument("--image-tag", default=None)
+    return parser.parse_args()
 
 
-@app.command()
-def deploy(
-    repo: str = typer.Option(..., help="Git repo URL (https)"),
-    app_name: str = typer.Option("autodeploy-app", help="ECR repo & ECS service name"),
-    aws_region: str = typer.Option("us-east-1"),
-    aws_profile: str = typer.Option("default"),
-    env: list[str] = typer.Option(
-        None, "--env", help="Extra env as KEY=VALUE (repeatable)"
-    ),
-):
-    # prep workdir
-    if WORK.exists():
-        shutil.rmtree(WORK)
-    SRC.parent.mkdir(parents=True, exist_ok=True)
+def main() -> int:
+    args = parse_args()
+    image_tag: str = args.image_tag or datetime.utcnow().strftime(
+        "%Y%m%d%H%M%S"
+    )
 
-    print("==> Cloning repo...")
-    Repo.clone_from(repo, SRC)
+    WORK.mkdir(parents=True, exist_ok=True)
+    SRC.mkdir(parents=True, exist_ok=True)
+    BUILD.mkdir(parents=True, exist_ok=True)
 
-    print("==> Analyzing source...")
     lang = detect_language()
-    port = detect_port()
-    print(f"Detected lang={lang}, port={port}")
-
-    print("==> Ensuring Dockerfile & minimal runtime files...")
     ensure_requirements(lang)
+    port = detect_port(default=5000)
     ensure_dockerfile(lang, port)
 
-    print("==> Building & pushing image...")
-    image, registry = docker_build_tag_push(
-        aws_region, aws_profile, app_name, image_tag=str(int(time.time()))
+    image_uri, _ = docker_build_tag_push(
+        aws_region=args.aws_region,
+        aws_profile=args.aws_profile,
+        app_name=args.app_name,
+        image_tag=image_tag,
     )
-    print("Pushed:", image)
 
-    print("==> Writing terraform.tfvars...")
-    extra_env = {}
-    if env:
-        for item in env:
-            if "=" in item:
-                k, v = item.split("=", 1)
-                extra_env[k.strip()] = v.strip()
-    tfvars = write_tfvars(app_name, image, aws_region, port, extra_env=extra_env)
-    print("tfvars at", tfvars)
+    tfvars_path = write_tfvars(
+        app_name=args.app_name,
+        image=image_uri,
+        aws_region=args.aws_region,
+        container_port=port,
+        extra_env={
+            "GUNICORN_CMD_ARGS": "--access-logfile - --log-level info"
+        },
+    )
+    print(f"wrote {tfvars_path}")
 
-    print("==> Terraform apply...")
-    run(["terraform", "init"], cwd=ROOT / "infra")
-    run(["terraform", "apply", "-auto-approve"], cwd=ROOT / "infra")
+    # terraform init / apply
+    run(["terraform", "-chdir=infra", "init", "-upgrade"])
+    run(
+        [
+            "terraform",
+            "-chdir=infra",
+            "apply",
+            "-auto-approve",
+            "-input=false",
+        ]
+    )
 
-    print("==> Fetching outputs...")
-    out = run(["terraform", "output", "-json"], cwd=ROOT / "infra")
-    try:
-        data = json.loads(out.stdout)
-        alb = data.get("alb_dns_name", {}).get("value")
-        if alb:
-            print(f"PUBLIC_URL: http://{alb}")
-        else:
-            print("No ALB output found.")
-    except Exception as e:
-        print("Could not parse terraform outputs:", e)
-    print("==> Done.")
+    # show outputs
+    alb = run(
+        ["terraform", "-chdir=infra", "output", "-raw", "alb_dns_name"]
+    ).stdout.strip()
+    svc = run(
+        ["terraform", "-chdir=infra", "output", "-raw", "service_name"]
+    ).stdout.strip()
 
-
-@app.command()
-def destroy(
-    aws_region: str = typer.Option("us-east-1"),
-    aws_profile: str = typer.Option("default"),
-):
-    print("==> Terraform destroy...")
-    run(["terraform", "destroy", "-auto-approve"], cwd=ROOT / "infra")
-    print("==> (Optional) Delete ECR repo manually if desired.")
+    print("\n=== Deployment complete ===")
+    print(f"Service  : {svc}")
+    print(f"Endpoint : http://{alb}")
+    return 0
 
 
 if __name__ == "__main__":
-    app()
+    raise SystemExit(main())

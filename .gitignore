@@ -19,3 +19,15 @@ infra/terraform.tfvars   # généré par l’orchestrateur → NE PAS COMMITTER
 *.zip
 infra/terraform.tfvars
 .workdir/
+
+# Terraform local state
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.*
+infra/terraform.tfvars
+
+# Local env & build
+.venv/
+.workdir/
+__pycache__/
+*.log

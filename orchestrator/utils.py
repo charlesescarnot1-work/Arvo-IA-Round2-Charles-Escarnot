@@ -1,4 +1,10 @@
-import os, re, subprocess, json, shutil, pathlib
+# orchestrator/utils.py
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import pathlib
 from typing import Optional
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -8,11 +14,19 @@ BUILD = WORK / "build"
 
 
 def run(
-    cmd: list[str], env: Optional[dict] = None, cwd: Optional[str | os.PathLike] = None
-):
+    cmd: list[str],
+    env: Optional[dict] = None,
+    cwd: Optional[str | os.PathLike] = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a shell command, echo it, and return the CompletedProcess."""
     print("$", " ".join(cmd))
     proc = subprocess.run(
-        cmd, cwd=cwd, env=env, check=True, text=True, capture_output=True
+        cmd,
+        cwd=cwd,
+        env=env,
+        check=True,
+        text=True,
+        capture_output=True,
     )
     if proc.stdout:
         print(proc.stdout)
@@ -21,20 +35,20 @@ def run(
     return proc
 
 
-def detect_language():
+def detect_language() -> str:
     files = [p.name.lower() for p in SRC.rglob("*") if p.is_file()]
     if "package.json" in files:
         return "node"
     if "requirements.txt" in files or "pyproject.toml" in files:
         return "python"
-    for p in SRC.rglob("*.py"):
+    for _ in SRC.rglob("*.py"):
         return "python"
-    for p in SRC.rglob("*.js"):
+    for _ in SRC.rglob("*.js"):
         return "node"
     return "unknown"
 
 
-def detect_port(default=8080):
+def detect_port(default: int = 8080) -> int:
     text = ""
     for p in SRC.rglob("*.*"):
         try:
@@ -42,7 +56,9 @@ def detect_port(default=8080):
                 continue
             text += p.read_text(encoding="utf-8", errors="ignore") + "\n"
         except Exception:
+            # best-effort scan
             pass
+
     m = re.search(r"(PORT|port)\s*[:=]\s*(\d{2,5})", text)
     if m:
         return int(m.group(2))
@@ -55,10 +71,11 @@ def detect_port(default=8080):
     return default
 
 
-def ensure_dockerfile(lang: str, port: int):
+def ensure_dockerfile(lang: str, port: int) -> None:
     df = SRC / "Dockerfile"
     if df.exists():
         return
+
     if lang == "python":
         content = f"""FROM python:3.11-slim
 WORKDIR /app
@@ -80,13 +97,13 @@ EXPOSE {port}
 CMD ["npm","start"]
 """
     else:
-        content = f"""FROM alpine:3.20
+        content = """FROM alpine:3.20
 CMD ["sh","-c","echo unsupported repo; sleep 3600"]
 """
     df.write_text(content)
 
 
-def ensure_requirements(lang: str):
+def ensure_requirements(lang: str) -> None:
     if lang == "python":
         req = SRC / "requirements.txt"
         if not req.exists():
@@ -94,23 +111,30 @@ def ensure_requirements(lang: str):
         app_py = SRC / "app.py"
         if not app_py.exists():
             app_py.write_text(
-                'from flask import Flask\napp=Flask(__name__)\n@app.get("/")\ndef hi(): return "ok"\n'
+                "from flask import Flask\n"
+                "app=Flask(__name__)\n"
+                '@app.get("/")\n'
+                'def hi(): return "ok"\n'
             )
+
     if lang == "node":
         pkg = SRC / "package.json"
         if not pkg.exists():
-            pkg.write_text(
-                '{"name":"app","version":"1.0.0","scripts":{"start":"node index.js"}}'
-            )
+            pkg.write_text('{"name":"app","version":"1.0.0","scripts":{"start":"node index.js"}}')
             (SRC / "index.js").write_text(
-                'const http=require("http");const port=process.env.PORT||8080;http.createServer((_,res)=>res.end("ok")).listen(port);'
+                'const http=require("http");'
+                "const port=process.env.PORT||8080;"
+                'http.createServer((_,res)=>res.end("ok")).listen(port);'
             )
 
 
 def docker_build_tag_push(
-    aws_region: str, aws_profile: str, app_name: str, image_tag: str
-):
-    # Ensure repo exists
+    aws_region: str,
+    aws_profile: str,
+    app_name: str,
+    image_tag: str,
+) -> tuple[str, str]:
+    # Ensure repo exists (create if needed)
     try:
         run(
             [
@@ -139,6 +163,7 @@ def docker_build_tag_push(
                 aws_profile,
             ]
         )
+
     login = run(
         [
             "aws",
@@ -150,6 +175,7 @@ def docker_build_tag_push(
             aws_profile,
         ]
     )
+
     account_id = run(
         [
             "aws",
@@ -163,6 +189,7 @@ def docker_build_tag_push(
             aws_profile,
         ]
     ).stdout.strip()
+
     registry = f"{account_id}.dkr.ecr.{aws_region}.amazonaws.com"
     proc = subprocess.Popen(
         ["docker", "login", "--username", "AWS", "--password-stdin", registry],
@@ -175,6 +202,7 @@ def docker_build_tag_push(
 
     image_local = f"{app_name}:{image_tag}"
     run(["docker", "build", "-t", image_local, "."], cwd=SRC)
+
     image_remote = f"{registry}/{app_name}:{image_tag}"
     run(["docker", "tag", image_local, image_remote])
     run(["docker", "push", image_remote])
@@ -187,25 +215,26 @@ def write_tfvars(
     aws_region: str,
     container_port: int,
     extra_env: dict | None = None,
-):
+) -> pathlib.Path:
     tfvars = ROOT / "infra" / "terraform.tfvars"
     extra_env = extra_env or {}
 
-    def hcl_map(d):
-        items = []
+    def hcl_map(d: dict) -> str:
+        # Escape backslashes and quotes for HCL-like strings
+        items: list[str] = []
         for k, v in d.items():
-            k_esc = k.replace("\\", "\\\\").replace('"', '"')
-            v_esc = str(v).replace("\\", "\\\\").replace('"', '"')
+            k_esc = str(k).replace("\\", "\\\\").replace('"', '\\"')
+            v_esc = str(v).replace("\\", "\\\\").replace('"', '\\"')
             items.append(f'"{k_esc}" = "{v_esc}"')
         return "{ " + ", ".join(items) + " }" if items else "{}"
 
     content = (
-        f'app_name     = "{app_name}"\n'
-        f'image_uri    = "{image}"\n'
-        f'aws_region   = "{aws_region}"\n'
+        f'app_name       = "{app_name}"\n'
+        f'image_uri      = "{image}"\n'
+        f'aws_region     = "{aws_region}"\n'
         f"container_port = {container_port}\n"
         f"desired_count  = 1\n"
-        f"extra_env = {hcl_map(extra_env)}\n"
+        f"extra_env      = {hcl_map(extra_env)}\n"
     )
     tfvars.write_text(content)
     return tfvars

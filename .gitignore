@@ -31,3 +31,4 @@ infra/terraform.tfvars
 .workdir/
 __pycache__/
 *.log
+infra/terraform.tfstate.backup

@@ -183,3 +183,18 @@ terraform -chdir=infra apply -auto-approve -var="desired_count=2"
 terraform -chdir=infra destroy -auto-approve
 aws ecr delete-repository --repository-name hello-world --force --region us-east-1 --profile arvo
 ```
+
+---
+## Architecture
+Voir le schéma : [docs/architecture.md](docs/architecture.md)
+
+## Sources & crédits
+- AWS (ECS, ALB, ECR, VPC)
+- Terraform (core + AWS provider)
+- Docker
+
+## Next steps
+- Support d’autres cibles (Lambda, Kubernetes)
+- Politiques IAM "least privilege"
+- Détecteurs de stacks supplémentaires (Node, Django, etc.)
+- HTTPS via ACM + listener 443

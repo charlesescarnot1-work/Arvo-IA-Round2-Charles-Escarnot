@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python checks (optionnel mais propre)
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: |
+          python -m pip install --upgrade pip
+          pip install black flake8
+          black --check orchestrator
+          flake8 orchestrator
+
+      # Terraform fmt/validate
+      - uses: hashicorp/setup-terraform@v3
+      - working-directory: infra
+        run: terraform fmt -check -recursive
+      - working-directory: infra
+        run: terraform init -backend=false
+      - working-directory: infra
+        run: terraform validate

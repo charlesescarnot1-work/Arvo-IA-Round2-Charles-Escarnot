@@ -1,0 +1,19 @@
+# venv / python
+.venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate*
+infra/terraform.tfvars   # généré par l’orchestrateur → NE PAS COMMITTER
+
+# Logs & autres
+*.log
+*.zip

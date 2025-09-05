@@ -17,3 +17,5 @@ infra/terraform.tfvars   # généré par l’orchestrateur → NE PAS COMMITTER
 # Logs & autres
 *.log
 *.zip
+infra/terraform.tfvars
+.workdir/

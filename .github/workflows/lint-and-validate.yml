@@ -1,20 +1,22 @@
 name: lint-and-validate
+
 on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
 jobs:
-  lint_and_validate:
+  lint-and-validate:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: '3.11'
 
       - name: Install dev tools (pinned)
         run: |
@@ -36,3 +38,4 @@ jobs:
         run: |
           terraform -chdir=infra init -backend=false -upgrade
           terraform -chdir=infra validate -no-color
+
